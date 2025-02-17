@@ -31,23 +31,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut receiver = create_wallet(&[1u8; 32])?;
 
         if wallet_total_balance(&miner, &mut sender)? < amount_to_send {
-          match fund_wallet(&miner, &mut sender, Amount::from_sat(1_000_000), 25) {
-            Ok(_) => {},
-            Err(err) => println!("ERROR(fund_wallet(sender)): {:?}", err),
-          };
-          funded = true;
+            match fund_wallet(&miner, &mut sender, Amount::from_sat(1_000_000), 25) {
+                Ok(_) => {}
+                Err(err) => println!("ERROR(fund_wallet(sender)): {:?}", err),
+            };
+            funded = true;
         }
 
         if wallet_total_balance(&miner, &mut receiver)? < amount_to_send {
-          match fund_wallet(&miner, &mut receiver, Amount::from_sat(500_000), 25) {
-            Ok(_) => {},
-            Err(err) => println!("ERROR(fund_wallet(receiver)): {:?}", err),
-          };
-          funded = true;
+            match fund_wallet(&miner, &mut receiver, Amount::from_sat(500_000), 25) {
+                Ok(_) => {}
+                Err(err) => println!("ERROR(fund_wallet(receiver)): {:?}", err),
+            };
+            funded = true;
         }
 
         if funded {
-          wait_for_block(&miner, 2)?;
+            wait_for_block(&miner, 2)?;
         }
 
         sync_wallet(&miner, &mut sender, funded)?;
@@ -60,23 +60,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let receiver = bitcoind_client("receiver").unwrap();
 
         if get_client_balance(&sender)? < amount_to_send {
-          match fund_client(&miner, &sender, Amount::from_sat(1_000_000), 25) {
-            Ok(_) => {},
-            Err(err) => println!("ERROR(fund_client(sender)): {:?}", err),
-          };
-          funded = true;
+            match fund_client(&miner, &sender, Amount::from_sat(1_000_000), 25) {
+                Ok(_) => {}
+                Err(err) => println!("ERROR(fund_client(sender)): {:?}", err),
+            };
+            funded = true;
         }
 
         if get_client_balance(&receiver)? < amount_to_send {
-          match fund_client(&miner, &receiver, Amount::from_sat(500_000), 25) {
-            Ok(_) => {},
-            Err(err) => println!("ERROR(fund_client(receiver)): {:?}", err),
-          };
-          funded = true;
+            match fund_client(&miner, &receiver, Amount::from_sat(500_000), 25) {
+                Ok(_) => {}
+                Err(err) => println!("ERROR(fund_client(receiver)): {:?}", err),
+            };
+            funded = true;
         }
 
         if funded {
-          wait_for_block(&miner, 2)?;
+            wait_for_block(&miner, 2)?;
         }
 
         if p2ep == "v1" {

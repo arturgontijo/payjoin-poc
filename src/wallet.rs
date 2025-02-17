@@ -30,8 +30,8 @@ pub fn fund_wallet(
     utxos: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..utxos {
-      let address = wallet.reveal_next_address(KeychainKind::External).address;
-      client.send_to_address(&address, amount, None, None, None, None, None, None)?;
+        let address = wallet.reveal_next_address(KeychainKind::External).address;
+        client.send_to_address(&address, amount, None, None, None, None, None, None)?;
     }
     Ok(())
 }
@@ -44,7 +44,10 @@ pub fn sync_wallet(
     let latest = client.get_block_count()?;
     let stored = wallet.latest_checkpoint().block_id().height as u64;
     if debug {
-        println!("    -> WalletSyncBlock: (stored={} | latest={})", stored, latest);
+        println!(
+            "    -> WalletSyncBlock: (stored={} | latest={})",
+            stored, latest
+        );
     }
     for height in stored..latest {
         let hash = client.get_block_hash(height)?;

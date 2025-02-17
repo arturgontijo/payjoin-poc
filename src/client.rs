@@ -23,8 +23,8 @@ pub fn fund_client(
     utxos: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..utxos {
-      let address = receiver.get_new_address(None, None)?.assume_checked();
-      bitcoind.send_to_address(&address, amount, None, None, None, None, None, None)?;
+        let address = receiver.get_new_address(None, None)?.assume_checked();
+        bitcoind.send_to_address(&address, amount, None, None, None, None, None, None)?;
     }
     Ok(())
 }
