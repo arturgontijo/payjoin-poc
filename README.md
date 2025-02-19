@@ -23,3 +23,8 @@ Payjoin using [rust-payjoin](https://github.com/payjoin/rust-payjoin) V2:
 ```bash
 cargo run -- v2
 ```
+
+[WIP] Payjoin to open channel between 2 [ldk-node](https://github.com/lightningdevkit/ldk-node/):
+```bash
+cargo run -- ldk
+```

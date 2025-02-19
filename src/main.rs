@@ -3,10 +3,12 @@ use std::env;
 use bdk_wallet::bitcoin::Amount;
 
 use client::{bitcoind_client, fund_client, get_client_balance, wait_for_block};
+use node::run_nodes;
 use payjoin::{direct::direct_payjoin, payjoin_v1::do_payjoin_v1, payjoin_v2::do_payjoin_v2};
 use wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance};
 
 mod client;
+mod node;
 mod payjoin;
 mod wallet;
 
@@ -14,21 +16,26 @@ mod wallet;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
-    let mut p2ep = "direct";
+    let mut op = "directly";
     if args.len() >= 2 {
-        p2ep = &args[1];
+        op = &args[1];
     }
 
     let miner = bitcoind_client("miner").unwrap();
 
+    let sender_seed = &[0u8; 64];
+    let receiver_seed = &[1u8; 64];
+
     let mut funded = false;
     let amount_to_send: Amount = Amount::from_sat(100_000);
 
-    if p2ep == "direct" {
+    if op == "ldk" {
+        run_nodes(&miner, sender_seed, receiver_seed)?;
+    } else if op == "directly" {
         // Direct Payjoin (bdk_wallet only)
         println!("===== Payjoin Directly =====");
-        let mut sender = create_wallet(&[0u8; 32])?;
-        let mut receiver = create_wallet(&[1u8; 32])?;
+        let mut sender = create_wallet(sender_seed)?;
+        let mut receiver = create_wallet(receiver_seed)?;
 
         if wallet_total_balance(&miner, &mut sender)? < amount_to_send {
             match fund_wallet(&miner, &mut sender, Amount::from_sat(1_000_000), 25) {
@@ -79,11 +86,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             wait_for_block(&miner, 2)?;
         }
 
-        if p2ep == "v1" {
+        if op == "v1" {
             // Payjoin V1 (rust-payjoin)
             println!("===== V1 =====");
             do_payjoin_v1(&sender, &receiver, amount_to_send, false)?;
-        } else if p2ep == "v2" {
+        } else if op == "v2" {
             // Payjoin V2 (rust-payjoin)
             println!("===== V2 =====");
             do_payjoin_v2(&sender, &receiver, amount_to_send).await?;
