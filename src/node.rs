@@ -2,23 +2,29 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use bitcoincore_rpc::{Client, RpcApi};
+
 use ldk_node::config::Config;
 use ldk_node::lightning::ln::msgs::SocketAddress;
+use ldk_node::lightning::ln::types::ChannelId;
 use ldk_node::lightning::routing::gossip::NodeAlias;
+use ldk_node::lightning_invoice::{Bolt11InvoiceDescription, Description};
 use ldk_node::Builder;
-
-use ldk_node::bitcoin::{Amount, Network};
-
-// use ldk_node::bitcoin::{
-//     policy::DEFAULT_MIN_RELAY_TX_FEE,
-//     FeeRate, locktime::absolute::LockTime,
-// };
+use ldk_node::LightningBalance::ClaimableAwaitingConfirmations;
+use ldk_node::bitcoin::{
+    Amount, Network,
+    policy::DEFAULT_MIN_RELAY_TX_FEE,
+    FeeRate, locktime::absolute::LockTime,
+};
 
 use crate::client::wait_for_block;
 
 const CHANNEL_READY_CONFIRMATION_BLOCKS: u64 = 6;
 
-fn get_config(node_alias: &str, port_in: u16, port_out: u16) -> Config {
+fn get_config(
+    node_alias: &str,
+    port_in: u16,
+    port_out: u16,
+) -> Result<Config, Box<dyn std::error::Error>> {
     let mut config = Config::default();
 
     config.network = Network::Signet;
@@ -42,7 +48,7 @@ fn get_config(node_alias: &str, port_in: u16, port_out: u16) -> Config {
     println!("Setting random LDK node alias: {:?}", alias);
     config.node_alias = Some(NodeAlias(bytes));
 
-    config
+    Ok(config)
 }
 
 pub fn run_nodes(
@@ -50,7 +56,7 @@ pub fn run_nodes(
     seed_a_bytes: &[u8; 64],
     seed_b_bytes: &[u8; 64],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut builder = Builder::from_config(get_config("nodeA", 7777, 7778));
+    let mut builder = Builder::from_config(get_config("nodeA", 7777, 7778)?);
     builder.set_chain_source_bitcoind_rpc(
         "0.0.0.0".to_string(),
         38332,
@@ -60,9 +66,9 @@ pub fn run_nodes(
 
     builder.set_entropy_seed_bytes(seed_a_bytes.to_vec())?;
 
-    let node_a = builder.build().unwrap();
+    let node_a = builder.build()?;
 
-    let mut builder = Builder::from_config(get_config("nodeB", 8888, 8889));
+    let mut builder = Builder::from_config(get_config("nodeB", 8888, 8889)?);
     builder.set_chain_source_bitcoind_rpc(
         "0.0.0.0".to_string(),
         38332,
@@ -72,11 +78,15 @@ pub fn run_nodes(
 
     builder.set_entropy_seed_bytes(seed_b_bytes.to_vec())?;
 
-    let node_b = builder.build().unwrap();
+    let node_b = builder.build()?;
 
     println!("[LDK-Node Payjoin] Starting NodeA and NodeB...");
-    node_a.start().unwrap();
-    node_b.start().unwrap();
+    node_a.start()?;
+    node_b.start()?;
+
+    println!("[LDK-Node Payjoin] Sync Wallets...");
+    node_a.sync_wallets()?;
+    node_b.sync_wallets()?;
 
     let node_a_address = node_a.onchain_payment().new_address()?;
     println!("[LDK-Node Payjoin] node_a_address: {:?}", node_a_address);
@@ -92,9 +102,16 @@ pub fn run_nodes(
         node_a.list_balances().spendable_onchain_balance_sats
     );
     if node_a.list_balances().spendable_onchain_balance_sats < amount.to_sat() {
-        let txid = bitcoind
-            .send_to_address(&node_a_address, amount, None, None, None, None, None, None)
-            .unwrap();
+        let txid = bitcoind.send_to_address(
+            &node_a_address,
+            amount,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
         println!(
             "  -> Funding NodeA({:?}) with {:?} -> txid: {:?}",
             node_a_address,
@@ -107,112 +124,169 @@ pub fn run_nodes(
                 "[LDK-Node Payjoin] NodeA({:?}) sync_wallets()",
                 node_a_address
             );
-            node_a.sync_wallets().unwrap();
+            node_a.sync_wallets()?;
             if node_a.list_balances().spendable_onchain_balance_sats >= amount.to_sat() {
                 break;
             }
         }
     }
 
-    //   // ----- Payjoin ------------------------------------------------------------------------------------------
-    // println!("[LDK-Node Payjoin] Sending some UTXOs to the nodes...");
-    //   let amount = Amount::from_sat(1_000_000);
-    //   bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None).unwrap();
-    //   bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None).unwrap();
-    //   bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None).unwrap();
+    // ----- Payjoin ------------------------------------------------------------------------------------------
+    println!("[LDK-Node Payjoin] Sending some UTXOs to the nodes...");
+    let amount = Amount::from_sat(1_000_000);
+    bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None)?;
+    bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None)?;
+    bitcoind.send_to_address(&node_a_address, amount, None, None, None, None, None, None)?;
 
-    //   bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None).unwrap();
-    //   bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None).unwrap();
-    //   bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None).unwrap();
+    bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None)?;
+    bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None)?;
+    bitcoind.send_to_address(&node_b_address, amount, None, None, None, None, None, None)?;
 
-    //   println!("[LDK-Node Payjoin] sync_wallets()...");
-    //   sleep(Duration::from_secs(12));
-    //   node_a.sync_wallets().unwrap();
-    //   node_b.sync_wallets().unwrap();
-    //   println!("[LDK-Node Payjoin] sync_wallets() -> Done");
-    //   let fee_rate = FeeRate::from_sat_per_vb(DEFAULT_MIN_RELAY_TX_FEE as u64).unwrap();
-    //   let locktime = LockTime::ZERO;
-    //   let mut psbt = node_a.payjoin_open_channel(
-    //     node_b_address.script_pubkey(),
-    //     amount,
-    //     fee_rate,
-    //     locktime,
-    //   ).unwrap();
+    println!("[LDK-Node Payjoin] sync_wallets()...");
+    sleep(Duration::from_secs(12));
+    node_a.sync_wallets()?;
+    node_b.sync_wallets()?;
+    println!("[LDK-Node Payjoin] sync_wallets() -> Done");
 
-    //   println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
-    //   println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+    // First step is to signal that we want to use an arbitrary tx to fund a channel
+    node_a.payjoin_set_current_channel_info(ChannelId::new_zero(), node_b_address.script_pubkey())?;
 
-    //   println!("[LDK-Node Payjoin] Adding NodeB UTXOs...");
-    //   node_b.payjoin_add_utxos_to_psbt(&mut psbt)?;
+    let amount = 777_777;
 
-    //   println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
-    //   println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+    let counterparty_node_id = node_b.node_id();
+    let counterparty_address = node_b
+        .listening_addresses()
+        .unwrap()
+        .first()
+        .unwrap()
+        .clone();
 
-    //   println!("[LDK-Node Payjoin] NodeA signing...");
-    //   node_a.payjoin_sign_psbt(&mut psbt)?;
-    //   println!("[LDK-Node Payjoin] NodeB signing...");
-    //   node_b.payjoin_sign_psbt(&mut psbt)?;
+    // Now we open a channel
+    let channel_id = node_a.open_channel(
+        counterparty_node_id,
+        counterparty_address,
+        amount,
+        None,
+        None)?;
 
-    //   println!("[LDK-Node Payjoin] Extracting PSBT tx...");
-    //   let tx = psbt.extract_tx()?;
-    //   println!("[LDK-Node Payjoin] Extracting PSBT tx: {}", tx.compute_txid());
+    println!("[LDK-Node Payjoin] UserChannelId (A <-> B): {:?}", channel_id);
 
-    //   // TODO: Use this transaction as a channel funding transaction (?!)
+    wait_for_block(&bitcoind, 2)?;
 
-    //   // Dummy: Manually send it really just to validate it.
-    //   println!("[LDK-Node Payjoin] Sending Tx...");
-    //   let txid = bitcoind.send_raw_transaction(&tx).unwrap();
-    //   println!("[LDK-Node Payjoin] Txid: {}", txid);
-    //   // --------------------------------------------------------------------------------------------------------
+    // The FundingGenerationReady event will be triggered and we will get the necessary data (channelId, scriptbuf) to fund the channel
+    if let Some((channel_id, channel_output_script)) = node_a.payjoin_get_current_channel_info()? {
+        println!("[LDK-Node Payjoin] ChannelId (A <-> B): {:?}", channel_id);
 
-    println!(
-        "[LDK-Node Payjoin] NodeA({:?}) (pre-channel): {:?} sats",
-        node_a_address,
-        node_a.list_balances().spendable_onchain_balance_sats
-    );
-    let channel_id = node_a
-        .open_channel(
-            node_b.node_id(),
-            node_b
-                .listening_addresses()
-                .unwrap()
-                .first()
-                .unwrap()
-                .clone(),
-            1_000_000,
-            None,
-            None,
-        )
-        .unwrap();
-    println!("[LDK-Node Payjoin] channel_id(A <-> B): {:?}", channel_id);
+        let fee_rate = FeeRate::from_sat_per_vb(DEFAULT_MIN_RELAY_TX_FEE as u64).unwrap();
+        let locktime = LockTime::ZERO;
+        let mut psbt = node_a.payjoin_build_psbt(
+            channel_output_script,
+            Amount::from_sat(amount),
+            fee_rate,
+            locktime,
+        )?;
+
+        println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
+        println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+
+        println!("[LDK-Node Payjoin] Adding NodeB UTXOs...");
+        node_b.payjoin_add_utxos_to_psbt(&mut psbt)?;
+
+        println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
+        println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+
+        println!("[LDK-Node Payjoin] NodeA signing...");
+        node_a.payjoin_sign_psbt(&mut psbt)?;
+        println!("[LDK-Node Payjoin] NodeB signing...");
+        node_b.payjoin_sign_psbt(&mut psbt)?;
+
+        println!(
+            "[LDK-Node Payjoin] NodeA({:?}) (pre-open-channel): {:?} sats",
+            node_a_address,
+            node_a.list_balances().spendable_onchain_balance_sats
+        );
+
+        // Use the Payjoin PSBT as the channel's funding transaction
+        node_a.payjoin_fund_channel(channel_id, node_b.node_id(), psbt)?;
+
+        // We can set the (channelId, scriptbuf) back to None now
+        node_a.payjoin_reset_current_channel_info()?;
+    }
+
     assert!(node_a
         .list_peers()
         .iter()
         .find(|c| { c.node_id == node_b.node_id() })
         .is_some());
 
-    wait_for_block(&bitcoind, CHANNEL_READY_CONFIRMATION_BLOCKS).unwrap();
+    wait_for_block(&bitcoind, CHANNEL_READY_CONFIRMATION_BLOCKS + 1)?;
 
     println!(
         "[LDK-Node Payjoin] NodeA({:?}) sync_wallets()",
         node_a_address
     );
-    node_a.sync_wallets().unwrap();
+    node_a.sync_wallets()?;
     println!(
         "[LDK-Node Payjoin] NodeB({:?}) sync_wallets()",
         node_b_address
     );
-    node_b.sync_wallets().unwrap();
+    node_b.sync_wallets()?;
 
     println!(
-        "[LDK-Node Payjoin] NodeA({:?}) (pos-channel): {:?} sats",
+        "[LDK-Node Payjoin] NodeA({:?}) (pos-open-channel): {:?} sats",
         node_a_address,
         node_a.list_balances().spendable_onchain_balance_sats
     );
 
+    println!("[LDK-Node Payjoin] Sending payment NodeA -> NodeB...");
+
+    let invoice_description = Bolt11InvoiceDescription::Direct(Description::new(String::from("asdf")).unwrap());
+	let invoice = node_b
+		.bolt11_payment()
+		.receive(5_000_000, &invoice_description.clone().into(), 9217)
+		.unwrap();
+    let payment_id = node_a.bolt11_payment().send(&invoice, None)?;
+
+    wait_for_block(&bitcoind, 2)?;
+
+    let status = node_a.payment(&payment_id).unwrap().status;
+    println!("[LDK-Node Payjoin] Payment sent: id={} | status(from NodeA): {:?}", payment_id, status);
+
+    println!(
+        "[LDK-Node Payjoin] NodeB({:?}) (pre-close-channel): {:?} sats",
+        node_b_address,
+        node_b.list_balances().spendable_onchain_balance_sats
+    );
+
+    let channels = node_b.list_channels();
+    if let Some(channel) = channels.first() {
+        node_b.close_channel(&channel.user_channel_id, channel.counterparty_node_id)?;
+    }
+    wait_for_block(&bitcoind, 2)?;
+
+    let mut confirmation_block = CHANNEL_READY_CONFIRMATION_BLOCKS;
+    for ln_balance in node_b.list_balances().lightning_balances {
+        match ln_balance {
+            ClaimableAwaitingConfirmations { confirmation_height, .. } => confirmation_block = confirmation_height as u64,
+            _ => {},
+        }
+    }
+
+    println!("[LDK-Node Payjoin] ClaimableAwaitingConfirmations at {}", confirmation_block);
+
+    let current_block = bitcoind.get_block_count()?;
+    wait_for_block(&bitcoind, confirmation_block - current_block + 1)?;
+
+    node_b.sync_wallets()?;
+    println!(
+        "[LDK-Node Payjoin] NodeB({:?}) (pos-close-channel): {:?}",
+        node_b_address,
+        node_b.list_balances().spendable_onchain_balance_sats
+    );
+
     println!("[LDK-Node Payjoin] Stopping NodeA and NodeB...");
-    node_a.stop().unwrap();
-    node_b.stop().unwrap();
+    node_a.stop()?;
+    node_b.stop()?;
 
     Ok(())
 }
