@@ -3,6 +3,9 @@ use std::time::Duration;
 
 use bitcoincore_rpc::{Client, RpcApi};
 
+use ldk_node::bitcoin::{
+    locktime::absolute::LockTime, policy::DEFAULT_MIN_RELAY_TX_FEE, Amount, FeeRate, Network,
+};
 use ldk_node::config::Config;
 use ldk_node::lightning::ln::msgs::SocketAddress;
 use ldk_node::lightning::ln::types::ChannelId;
@@ -10,11 +13,6 @@ use ldk_node::lightning::routing::gossip::NodeAlias;
 use ldk_node::lightning_invoice::{Bolt11InvoiceDescription, Description};
 use ldk_node::Builder;
 use ldk_node::LightningBalance::ClaimableAwaitingConfirmations;
-use ldk_node::bitcoin::{
-    Amount, Network,
-    policy::DEFAULT_MIN_RELAY_TX_FEE,
-    FeeRate, locktime::absolute::LockTime,
-};
 
 use crate::client::wait_for_block;
 
@@ -149,7 +147,8 @@ pub fn run_nodes(
     println!("[LDK-Node Payjoin] sync_wallets() -> Done");
 
     // First step is to signal that we want to use an arbitrary tx to fund a channel
-    node_a.payjoin_set_current_channel_info(ChannelId::new_zero(), node_b_address.script_pubkey())?;
+    node_a
+        .payjoin_set_current_channel_info(ChannelId::new_zero(), node_b_address.script_pubkey())?;
 
     let amount = 777_777;
 
@@ -167,9 +166,13 @@ pub fn run_nodes(
         counterparty_address,
         amount,
         None,
-        None)?;
+        None,
+    )?;
 
-    println!("[LDK-Node Payjoin] UserChannelId (A <-> B): {:?}", channel_id);
+    println!(
+        "[LDK-Node Payjoin] UserChannelId (A <-> B): {:?}",
+        channel_id
+    );
 
     wait_for_block(&bitcoind, 2)?;
 
@@ -187,13 +190,19 @@ pub fn run_nodes(
         )?;
 
         println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
-        println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+        println!(
+            "[LDK-Node Payjoin] PSBT(outputs.len): {}",
+            psbt.outputs.len()
+        );
 
         println!("[LDK-Node Payjoin] Adding NodeB UTXOs...");
         node_b.payjoin_add_utxos_to_psbt(&mut psbt)?;
 
         println!("[LDK-Node Payjoin] PSBT(inputs.len): {}", psbt.inputs.len());
-        println!("[LDK-Node Payjoin] PSBT(outputs.len): {}", psbt.outputs.len());
+        println!(
+            "[LDK-Node Payjoin] PSBT(outputs.len): {}",
+            psbt.outputs.len()
+        );
 
         println!("[LDK-Node Payjoin] NodeA signing...");
         node_a.payjoin_sign_psbt(&mut psbt)?;
@@ -240,17 +249,21 @@ pub fn run_nodes(
 
     println!("[LDK-Node Payjoin] Sending payment NodeA -> NodeB...");
 
-    let invoice_description = Bolt11InvoiceDescription::Direct(Description::new(String::from("asdf")).unwrap());
-	let invoice = node_b
-		.bolt11_payment()
-		.receive(5_000_000, &invoice_description.clone().into(), 9217)
-		.unwrap();
+    let invoice_description =
+        Bolt11InvoiceDescription::Direct(Description::new(String::from("asdf")).unwrap());
+    let invoice = node_b
+        .bolt11_payment()
+        .receive(5_000_000, &invoice_description.clone().into(), 9217)
+        .unwrap();
     let payment_id = node_a.bolt11_payment().send(&invoice, None)?;
 
     wait_for_block(&bitcoind, 2)?;
 
     let status = node_a.payment(&payment_id).unwrap().status;
-    println!("[LDK-Node Payjoin] Payment sent: id={} | status(from NodeA): {:?}", payment_id, status);
+    println!(
+        "[LDK-Node Payjoin] Payment sent: id={} | status(from NodeA): {:?}",
+        payment_id, status
+    );
 
     println!(
         "[LDK-Node Payjoin] NodeB({:?}) (pre-close-channel): {:?} sats",
@@ -267,12 +280,18 @@ pub fn run_nodes(
     let mut confirmation_block = CHANNEL_READY_CONFIRMATION_BLOCKS;
     for ln_balance in node_b.list_balances().lightning_balances {
         match ln_balance {
-            ClaimableAwaitingConfirmations { confirmation_height, .. } => confirmation_block = confirmation_height as u64,
-            _ => {},
+            ClaimableAwaitingConfirmations {
+                confirmation_height,
+                ..
+            } => confirmation_block = confirmation_height as u64,
+            _ => {}
         }
     }
 
-    println!("[LDK-Node Payjoin] ClaimableAwaitingConfirmations at {}", confirmation_block);
+    println!(
+        "[LDK-Node Payjoin] ClaimableAwaitingConfirmations at {}",
+        confirmation_block
+    );
 
     let current_block = bitcoind.get_block_count()?;
     wait_for_block(&bitcoind, confirmation_block - current_block + 1)?;
