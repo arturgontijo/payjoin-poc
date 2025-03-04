@@ -24,7 +24,21 @@ Payjoin using [rust-payjoin](https://github.com/payjoin/rust-payjoin) V2:
 cargo run -- v2
 ```
 
-[WIP] Payjoin to open channel between 2 [ldk-node](https://github.com/lightningdevkit/ldk-node/):
+Payjoin to open channel between 2 [ldk-node](https://github.com/lightningdevkit/ldk-node/):
 ```bash
 cargo run -- ldk
+```
+
+[WIP] Payjoin Mixer between nodes:
+```bash
+# Build a PSBT and circle it between nodes
+cargo run -- mixer 1
+# Merge multiple PSBTs
+cargo run -- mixer 2
+# Add foreign UTXOs to a PSBT
+cargo run -- mixer 3
+# Circle serialized PSBTs (hex) between participants 
+cargo run -- mixer 4
+# Introduce the "Pool of UTXOs" idea
+cargo run -- mixer 5
 ```

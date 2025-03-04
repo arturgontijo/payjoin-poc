@@ -1,16 +1,18 @@
+mod client;
+mod mixer;
+mod node;
+mod payjoin;
+mod wallet;
+
 use std::env;
 
 use bdk_wallet::bitcoin::Amount;
 
 use client::{bitcoind_client, fund_client, get_client_balance, wait_for_block};
+use mixer::methods;
 use node::run_nodes;
 use payjoin::{direct::direct_payjoin, payjoin_v1::do_payjoin_v1, payjoin_v2::do_payjoin_v2};
 use wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance};
-
-mod client;
-mod node;
-mod payjoin;
-mod wallet;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,6 +21,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut op = "directly";
     if args.len() >= 2 {
         op = &args[1];
+    }
+
+    let mut sub_op = "1";
+    if args.len() >= 3 {
+        sub_op = &args[2];
     }
 
     let miner = bitcoind_client("miner").unwrap();
@@ -31,6 +38,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if op == "ldk" {
         run_nodes(&miner, sender_seed, receiver_seed)?;
+    } else if op == "mixer" {
+        match sub_op {
+            "1" => methods::method_1(&miner)?,
+            "2" => methods::method_2(&miner)?,
+            "3" => methods::method_3(&miner)?,
+            "4" => methods::method_4(&miner)?,
+            "5" => methods::method_5(&miner)?,
+            _ => println!("ERROR(mixer(method)): Invalid method!"),
+        }
     } else if op == "directly" {
         // Direct Payjoin (bdk_wallet only)
         println!("===== Payjoin Directly =====");
