@@ -41,4 +41,6 @@ cargo run -- mixer 3
 cargo run -- mixer 4
 # Introduce the "Pool of UTXOs" idea
 cargo run -- mixer 5
+# Build a PSBT and circle it between nodes ensuring uniform output sizes. 
+cargo run -- mixer 6
 ```

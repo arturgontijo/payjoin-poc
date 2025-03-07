@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "3" => methods::method_3(&miner)?,
             "4" => methods::method_4(&miner)?,
             "5" => methods::method_5(&miner)?,
+            "6" => methods::method_6(&miner)?,
             _ => println!("ERROR(mixer(method)): Invalid method!"),
         }
     } else if op == "directly" {
