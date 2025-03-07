@@ -60,9 +60,9 @@ fn add_utxos_to_psbt(
             receiver_utxos_value += utxo.txout.value;
 
             if let Some(uniform_amount) = uniform_amount {
-              if receiver_utxos_value >= uniform_amount + fee {
-                break;
-              }
+                if receiver_utxos_value >= uniform_amount + fee {
+                    break;
+                }
             }
 
             count += 1;
@@ -80,23 +80,29 @@ fn add_utxos_to_psbt(
     }
 
     if let Some(uniform_amount) = uniform_amount {
-      let script_pubkey = wallet
+        let script_pubkey = wallet
+            .reveal_next_address(KeychainKind::External)
+            .address
+            .script_pubkey();
+
+        let output = TxOut {
+            value: uniform_amount,
+            script_pubkey,
+        };
+        psbt.outputs.push(Output::default());
+        psbt.unsigned_tx.output.push(output);
+        value -= uniform_amount;
+    }
+
+    let script_pubkey = wallet
         .reveal_next_address(KeychainKind::External)
         .address
         .script_pubkey();
 
-      let output = TxOut { value: uniform_amount, script_pubkey };
-      psbt.outputs.push(Output::default());
-      psbt.unsigned_tx.output.push(output);
-      value -= uniform_amount;
-    }
-
-    let script_pubkey = wallet
-      .reveal_next_address(KeychainKind::External)
-      .address
-      .script_pubkey();
-
-    let output = TxOut { value, script_pubkey };
+    let output = TxOut {
+        value,
+        script_pubkey,
+    };
     psbt.outputs.push(Output::default());
     psbt.unsigned_tx.output.push(output);
 
@@ -731,89 +737,89 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 //     2 - Each node adds their UTXOs to that PSBT with, at least, one output with receiver's amount (uniform)
 //     3 - Once its done the final PSBT is circle back to each node so they can sign it
 pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
-  let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
-  // Starting the PSBT
-  println!("[Mixer] Sender PSBT...");
-  let amount = Amount::from_sat(777_777);
-  let script_pubkey = receiver
-      .reveal_next_address(KeychainKind::External)
-      .address
-      .script_pubkey();
+    let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
+    // Starting the PSBT
+    println!("[Mixer] Sender PSBT...");
+    let amount = Amount::from_sat(777_777);
+    let script_pubkey = receiver
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
 
-  let mut psbt = build_psbt(&mut sender, script_pubkey, amount, 2)?;
+    let mut psbt = build_psbt(&mut sender, script_pubkey, amount, 2)?;
 
-  let participants = nodes.len() as u64;
-  let fee_per_participant = Amount::from_sat(77_777);
+    let participants = nodes.len() as u64;
+    let fee_per_participant = Amount::from_sat(77_777);
 
-  println!("[Mixer] Sending PSBT to the Network...");
-  for node in nodes.iter_mut() {
-      add_utxos_to_psbt(node, &mut psbt, 2, Some(amount), fee_per_participant, false)?;
-  }
+    println!("[Mixer] Sending PSBT to the Network...");
+    for node in nodes.iter_mut() {
+        add_utxos_to_psbt(node, &mut psbt, 2, Some(amount), fee_per_participant, false)?;
+    }
 
-  let total_fee = fee_per_participant * participants;
-  println!("[Mixer] TotalFee    ({})", total_fee);
+    let total_fee = fee_per_participant * participants;
+    println!("[Mixer] TotalFee    ({})", total_fee);
 
-  // To cover fees
-  add_utxos_to_psbt(&mut sender, &mut psbt, 2, None, total_fee, true)?;
+    // To cover fees
+    add_utxos_to_psbt(&mut sender, &mut psbt, 2, None, total_fee, true)?;
 
-  sender.sign(&mut psbt, SignOptions::default())?;
-  for node in nodes.iter_mut() {
-      node.sign(&mut psbt, SignOptions::default())?;
-  }
+    sender.sign(&mut psbt, SignOptions::default())?;
+    for node in nodes.iter_mut() {
+        node.sign(&mut psbt, SignOptions::default())?;
+    }
 
-  println!("[Mixer] Extracting Tx...");
-  let tx = psbt.clone().extract_tx()?;
+    println!("[Mixer] Extracting Tx...");
+    let tx = psbt.clone().extract_tx()?;
 
-  for input in tx.input.iter() {
-    let tx = bitcoind.get_raw_transaction_info(&input.previous_output.txid, None)?;
-    let value = tx.vout[input.previous_output.vout as usize].value;
-    println!("====> Input ({})", value);
-  }
+    for input in tx.input.iter() {
+        let tx = bitcoind.get_raw_transaction_info(&input.previous_output.txid, None)?;
+        let value = tx.vout[input.previous_output.vout as usize].value;
+        println!("====> Input ({})", value);
+    }
 
-  for output in tx.output.iter() {
-    println!("====> Outputs ({})", output.value);
-  }
+    for output in tx.output.iter() {
+        println!("====> Outputs ({})", output.value);
+    }
 
-  let sender_initial_balance = wallet_total_balance(bitcoind, &mut sender)?;
-  let receiver_initial_balance = wallet_total_balance(bitcoind, &mut receiver)?;
+    let sender_initial_balance = wallet_total_balance(bitcoind, &mut sender)?;
+    let receiver_initial_balance = wallet_total_balance(bitcoind, &mut receiver)?;
 
-  let mut nodes_balance = vec![];
-  for node in nodes.iter_mut() {
-    nodes_balance.push(wallet_total_balance(bitcoind, node)?);
-  }
+    let mut nodes_balance = vec![];
+    for node in nodes.iter_mut() {
+        nodes_balance.push(wallet_total_balance(bitcoind, node)?);
+    }
 
-  println!("[Mixer] Sending Tx...");
-  bitcoind.send_raw_transaction(&tx).unwrap();
+    println!("[Mixer] Sending Tx...");
+    bitcoind.send_raw_transaction(&tx).unwrap();
 
-  wait_for_block(bitcoind, 3)?;
+    wait_for_block(bitcoind, 3)?;
 
-  let balance = wallet_total_balance(bitcoind, &mut sender)?;
-  println!(
-      "[Mixer] Sender Balance (b/a/delta): {:?} | {:?} | {:?}",
-      sender_initial_balance,
-      balance,
-      sender_initial_balance - balance,
-  );
-
-  let balance = wallet_total_balance(bitcoind, &mut receiver)?;
-  println!(
-      "[Mixer] Receiver Balance (b/a/delta): {:?} | {:?} | {:?}",
-      receiver_initial_balance,
-      balance,
-      balance - receiver_initial_balance,
-  );
-
-  for (idx, node) in nodes.iter_mut().enumerate() {
-    let before = nodes_balance[idx];
-    let balance = wallet_total_balance(bitcoind, node)?;
+    let balance = wallet_total_balance(bitcoind, &mut sender)?;
     println!(
-        "[Mixer] Node {} Balance (b/a/delta): {:?} | {:?} | {:?}",
-        idx,
-        before,
+        "[Mixer] Sender Balance (b/a/delta): {:?} | {:?} | {:?}",
+        sender_initial_balance,
         balance,
-        balance - before,
+        sender_initial_balance - balance,
     );
-  }
 
-  Ok(())
+    let balance = wallet_total_balance(bitcoind, &mut receiver)?;
+    println!(
+        "[Mixer] Receiver Balance (b/a/delta): {:?} | {:?} | {:?}",
+        receiver_initial_balance,
+        balance,
+        balance - receiver_initial_balance,
+    );
+
+    for (idx, node) in nodes.iter_mut().enumerate() {
+        let before = nodes_balance[idx];
+        let balance = wallet_total_balance(bitcoind, node)?;
+        println!(
+            "[Mixer] Node {} Balance (b/a/delta): {:?} | {:?} | {:?}",
+            idx,
+            before,
+            balance,
+            balance - before,
+        );
+    }
+
+    Ok(())
 }
