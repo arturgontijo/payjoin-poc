@@ -1,5 +1,5 @@
 mod client;
-mod mixer;
+mod batch;
 mod node;
 mod payjoin;
 mod wallet;
@@ -9,8 +9,8 @@ use std::env;
 use bdk_wallet::bitcoin::Amount;
 
 use client::{bitcoind_client, fund_client, get_client_balance, wait_for_block};
-use mixer::methods;
-use node::run_nodes;
+use batch::methods;
+use node::{payjoin_batch, payjoin_open_channel};
 use payjoin::{direct::direct_payjoin, payjoin_v1::do_payjoin_v1, payjoin_v2::do_payjoin_v2};
 use wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance};
 
@@ -37,8 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let amount_to_send: Amount = Amount::from_sat(100_000);
 
     if op == "ldk" {
-        run_nodes(&miner, sender_seed, receiver_seed)?;
-    } else if op == "mixer" {
+        payjoin_batch(&miner)?;
+    } else if op == "ldk-open-channel" {
+        payjoin_open_channel(&miner)?;
+    } else if op == "batch" {
         match sub_op {
             "1" => methods::method_1(&miner)?,
             "2" => methods::method_2(&miner)?,
@@ -46,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "4" => methods::method_4(&miner)?,
             "5" => methods::method_5(&miner)?,
             "6" => methods::method_6(&miner)?,
-            _ => println!("ERROR(mixer(method)): Invalid method!"),
+            _ => println!("ERROR(batch(method)): Invalid method!"),
         }
     } else if op == "directly" {
         // Direct Payjoin (bdk_wallet only)

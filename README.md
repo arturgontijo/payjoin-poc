@@ -26,21 +26,30 @@ cargo run -- v2
 
 Payjoin to open channel between 2 [ldk-node](https://github.com/lightningdevkit/ldk-node/):
 ```bash
-cargo run -- ldk
+cargo run -- ldk-open-channel
+# You should delete the ./data/ in order to get a fresh re-run
+rm -rf data && cargo run -- ldk-open-channel
 ```
 
-[WIP] Payjoin Mixer between nodes:
+[WIP] Payjoin Batch between wallets:
 ```bash
-# Build a PSBT and circle it between nodes
-cargo run -- mixer 1
+# Build a PSBT and circle it between wallets
+cargo run -- batch 1
 # Merge multiple PSBTs
-cargo run -- mixer 2
+cargo run -- batch 2
 # Add foreign UTXOs to a PSBT
-cargo run -- mixer 3
+cargo run -- batch 3
 # Circle serialized PSBTs (hex) between participants 
-cargo run -- mixer 4
+cargo run -- batch 4
 # Introduce the "Pool of UTXOs" idea
-cargo run -- mixer 5
-# Build a PSBT and circle it between nodes ensuring uniform output sizes. 
-cargo run -- mixer 6
+cargo run -- batch 5
+# Build a PSBT and circle it between wallets ensuring uniform output sizes. 
+cargo run -- batch 6
+```
+
+Payjoin Batch between [ldk-node](https://github.com/lightningdevkit/ldk-node/):
+```bash
+cargo run -- ldk
+# You should delete the ./data/ in order to get a fresh re-run
+rm -rf data && cargo run -- ldk
 ```

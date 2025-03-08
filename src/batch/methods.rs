@@ -14,7 +14,7 @@ use crate::{
     wallet::{create_wallet, fund_wallet, get_wallet_utxos, sync_wallet, wallet_total_balance},
 };
 
-fn add_utxos_to_psbt(
+pub fn add_utxos_to_psbt(
     wallet: &mut Wallet,
     psbt: &mut Psbt,
     max_count: u16,
@@ -38,7 +38,7 @@ fn add_utxos_to_psbt(
             continue;
         }
         println!(
-            "[Mixer] Adding UTXO [txid={:?} | vout={:?}]",
+            "[Batch] Adding UTXO [txid={:?} | vout={:?}]",
             utxo.outpoint.txid, utxo.outpoint.vout
         );
         if let Some(canonical_tx) = wallet
@@ -133,7 +133,7 @@ fn add_utxos(
             continue;
         }
         println!(
-            "[Mixer] Adding UTXO [txid={:?} | vout={:?}]",
+            "[Batch] Adding UTXO [txid={:?} | vout={:?}]",
             utxo.outpoint.txid, utxo.outpoint.vout
         );
         if let Some(canonical_tx) = wallet
@@ -206,7 +206,7 @@ fn add_utxos_from_pool(
             continue;
         }
         println!(
-            "[Mixer] Adding UTXO [txid={:?} | vout={:?}]",
+            "[Batch] Adding UTXO [txid={:?} | vout={:?}]",
             utxo.outpoint.txid, utxo.outpoint.vout
         );
 
@@ -241,7 +241,7 @@ fn add_utxos_from_pool(
     Ok(())
 }
 
-fn build_psbt(
+pub fn build_psbt(
     sender: &mut Wallet,
     script_pubkey: ScriptBuf,
     amount: Amount,
@@ -298,7 +298,7 @@ fn setup(
     bitcoind: &Client,
     count: u8,
 ) -> Result<(Wallet, Wallet, Vec<Wallet>), Box<dyn std::error::Error>> {
-    println!("[Mixer] Starting...");
+    println!("[Batch] Starting...");
     let mut nodes = vec![];
     for idx in 1..=count {
         nodes.push(create_wallet(&[idx; 64])?);
@@ -332,23 +332,23 @@ pub fn method_1(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
     }
 
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
 
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
@@ -360,7 +360,7 @@ pub fn method_1(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let fee_per_participant = Amount::from_sat(77_777);
     let participants = nodes.len() as u64;
 
-    println!("[Mixer] Getting PSBT from Network...");
+    println!("[Batch] Getting PSBT from Network...");
     for node in nodes.iter_mut() {
         add_utxos_to_psbt(node, &mut psbt, 2, None, fee_per_participant, false)?;
     }
@@ -368,12 +368,12 @@ pub fn method_1(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     // Check total inputs/outputs amount (DEBUG)
     let (wit, non_wit) = get_input_value(&psbt);
     let total_output = get_total_output(&psbt);
-    println!("[Mixer] Inputs(wit) ({})", wit);
-    println!("[Mixer] Inputs(nwt) ({})", non_wit);
-    println!("[Mixer] Outputs     ({})", total_output);
+    println!("[Batch] Inputs(wit) ({})", wit);
+    println!("[Batch] Inputs(nwt) ({})", non_wit);
+    println!("[Batch] Outputs     ({})", total_output);
     let total_fee = fee_per_participant * participants;
-    println!("[Mixer] TotalFee    ({})", total_fee);
-    println!("[Mixer] Delta       ({})", total_output - wit - total_fee);
+    println!("[Batch] TotalFee    ({})", total_fee);
+    println!("[Batch] Delta       ({})", total_output - wit - total_fee);
 
     // To cover fees
     add_utxos_to_psbt(&mut sender, &mut psbt, 2, None, total_fee, true)?;
@@ -384,25 +384,25 @@ pub fn method_1(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 
     sender.sign(&mut psbt, SignOptions::default()).unwrap();
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = psbt.clone().extract_tx()?;
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     wait_for_block(bitcoind, 2)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
@@ -420,7 +420,7 @@ pub fn method_1(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 pub fn method_2(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
         .reveal_next_address(KeychainKind::External)
@@ -428,7 +428,7 @@ pub fn method_2(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         .script_pubkey();
     let mut sender_psbt = build_psbt(&mut sender, script_pubkey, amount, 2)?;
 
-    println!("[Mixer] Getting PSBT from Network...");
+    println!("[Batch] Getting PSBT from Network...");
     let mut psbts = vec![];
     for node in nodes.iter_mut() {
         let script_pubkey = node
@@ -439,7 +439,7 @@ pub fn method_2(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         psbts.push(psbt);
     }
 
-    println!("[Mixer] Building final PSBT from Network's one...");
+    println!("[Batch] Building final PSBT from Network's one...");
     for psbt in psbts {
         sender_psbt
             .unsigned_tx
@@ -458,13 +458,13 @@ pub fn method_2(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         node.sign(&mut sender_psbt, SignOptions::default())?;
     }
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = sender_psbt.clone().extract_tx()?;
 
     let total_output: Amount = tx.output.iter().map(|output| output.value).sum();
     println!("====> Outputs ({})", total_output);
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     Ok(())
@@ -479,7 +479,7 @@ pub fn method_2(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 pub fn method_3(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
         .reveal_next_address(KeychainKind::External)
@@ -495,7 +495,7 @@ pub fn method_3(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         .fee_rate(fee_rate)
         .nlocktime(locktime);
 
-    println!("[Mixer] Getting UTXOs from Network...");
+    println!("[Batch] Getting UTXOs from Network...");
     for node in nodes.iter_mut() {
         let utxos = get_wallet_utxos(&node);
         for utxo in utxos {
@@ -524,13 +524,13 @@ pub fn method_3(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         node.sign(&mut sender_psbt, SignOptions::default())?;
     }
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = sender_psbt.clone().extract_tx()?;
 
     let total_output: Amount = tx.output.iter().map(|output| output.value).sum();
     println!("====> Outputs ({})", total_output);
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     Ok(())
@@ -546,23 +546,23 @@ pub fn method_4(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
     }
 
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
 
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
@@ -574,10 +574,10 @@ pub fn method_4(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let fee_per_participant = Amount::from_sat(77_777);
     let participants = nodes.len() as u64;
 
-    println!("[Mixer] Getting PSBT from Network...");
+    println!("[Batch] Getting PSBT from Network...");
     let mut psbt_hex = psbt.serialize_hex();
     for node in nodes.iter_mut() {
-        println!("\n[Mixer] PSBT(hex) from Network: {}\n", psbt_hex);
+        println!("\n[Batch] PSBT(hex) from Network: {}\n", psbt_hex);
         psbt_hex = add_utxos(node, psbt_hex, fee_per_participant, false)?;
     }
 
@@ -585,42 +585,42 @@ pub fn method_4(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     psbt = Psbt::deserialize(&hex::decode(psbt_hex)?)?;
 
     let total_fee = fee_per_participant * participants;
-    println!("[Mixer] TotalFee    ({})", total_fee);
+    println!("[Batch] TotalFee    ({})", total_fee);
 
     // To cover fees
     psbt_hex = psbt.serialize_hex();
-    println!("\n[Mixer] PSBT(hex) from sender: {}\n", psbt_hex);
+    println!("\n[Batch] PSBT(hex) from sender: {}\n", psbt_hex);
     psbt_hex = add_utxos(&mut sender, psbt_hex, total_fee, true)?;
 
     psbt = Psbt::deserialize(&hex::decode(psbt_hex)?)?;
 
-    println!("[Mixer] Nodes signing...");
+    println!("[Batch] Nodes signing...");
     for node in nodes.iter_mut() {
         node.sign(&mut psbt, SignOptions::default()).unwrap();
     }
 
-    println!("[Mixer] Sender signing...");
+    println!("[Batch] Sender signing...");
     sender.sign(&mut psbt, SignOptions::default()).unwrap();
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = psbt.clone().extract_tx()?;
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     wait_for_block(bitcoind, 2)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
@@ -637,23 +637,23 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
     }
 
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
 
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
@@ -665,7 +665,7 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let participants = nodes.len() as u64;
     let fee_per_participant = Amount::from_sat(77_777);
 
-    println!("[Mixer] Nodes send their avail txs to Network Pool...");
+    println!("[Batch] Nodes send their avail txs to Network Pool...");
     let mut pool = vec![];
     for node in nodes.iter_mut() {
         let mut nodes_utxos = vec![];
@@ -687,13 +687,13 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         pool.push((script_pubkey, nodes_utxos));
     }
 
-    println!("[Mixer] Getting transaction from Network Pool");
+    println!("[Batch] Getting transaction from Network Pool");
     for (script_buf, utxos_txs) in pool {
         add_utxos_from_pool(&mut psbt, utxos_txs, script_buf, fee_per_participant)?;
     }
 
     let total_fee = fee_per_participant * participants;
-    println!("[Mixer] TotalFee    ({})", total_fee);
+    println!("[Batch] TotalFee    ({})", total_fee);
 
     // To cover fees
     add_utxos_to_psbt(&mut sender, &mut psbt, 2, None, total_fee, true)?;
@@ -704,25 +704,25 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 
     sender.sign(&mut psbt, SignOptions::default()).unwrap();
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = psbt.clone().extract_tx()?;
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     wait_for_block(bitcoind, 3)?;
 
     println!(
-        "[Mixer] Sender Balance: {:?}",
+        "[Batch] Sender Balance: {:?}",
         wallet_total_balance(bitcoind, &mut sender)?
     );
     println!(
-        "[Mixer] Receiver Balance: {:?}",
+        "[Batch] Receiver Balance: {:?}",
         wallet_total_balance(bitcoind, &mut receiver)?
     );
     for (idx, node) in nodes.iter_mut().enumerate() {
         println!(
-            "[Mixer] Node {} Balance: {:?}",
+            "[Batch] Node {} Balance: {:?}",
             idx,
             wallet_total_balance(bitcoind, node)?
         );
@@ -739,7 +739,7 @@ pub fn method_5(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let (mut sender, mut receiver, mut nodes) = setup(bitcoind, 5)?;
     // Starting the PSBT
-    println!("[Mixer] Sender PSBT...");
+    println!("[Batch] Sender PSBT...");
     let amount = Amount::from_sat(777_777);
     let script_pubkey = receiver
         .reveal_next_address(KeychainKind::External)
@@ -751,23 +751,23 @@ pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
     let participants = nodes.len() as u64;
     let fee_per_participant = Amount::from_sat(77_777);
 
-    println!("[Mixer] Sending PSBT to the Network...");
-    for node in nodes.iter_mut() {
-        add_utxos_to_psbt(node, &mut psbt, 2, Some(amount), fee_per_participant, false)?;
-    }
-
     let total_fee = fee_per_participant * participants;
-    println!("[Mixer] TotalFee    ({})", total_fee);
+    println!("[Batch] TotalFee    ({})", total_fee);
 
     // To cover fees
     add_utxos_to_psbt(&mut sender, &mut psbt, 2, None, total_fee, true)?;
+
+    println!("[Batch] Sending PSBT to the Network...");
+    for node in nodes.iter_mut() {
+        add_utxos_to_psbt(node, &mut psbt, 2, Some(amount), fee_per_participant, false)?;
+    }
 
     sender.sign(&mut psbt, SignOptions::default())?;
     for node in nodes.iter_mut() {
         node.sign(&mut psbt, SignOptions::default())?;
     }
 
-    println!("[Mixer] Extracting Tx...");
+    println!("[Batch] Extracting Tx...");
     let tx = psbt.clone().extract_tx()?;
 
     for input in tx.input.iter() {
@@ -788,14 +788,14 @@ pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         nodes_balance.push(wallet_total_balance(bitcoind, node)?);
     }
 
-    println!("[Mixer] Sending Tx...");
+    println!("[Batch] Sending Tx...");
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     wait_for_block(bitcoind, 3)?;
 
     let balance = wallet_total_balance(bitcoind, &mut sender)?;
     println!(
-        "[Mixer] Sender Balance (b/a/delta): {:?} | {:?} | {:?}",
+        "[Batch] Sender Balance (b/a/delta)  : {} | {} | {}",
         sender_initial_balance,
         balance,
         sender_initial_balance - balance,
@@ -803,7 +803,7 @@ pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
 
     let balance = wallet_total_balance(bitcoind, &mut receiver)?;
     println!(
-        "[Mixer] Receiver Balance (b/a/delta): {:?} | {:?} | {:?}",
+        "[Batch] Receiver Balance (b/a/delta): {} | {} | {}",
         receiver_initial_balance,
         balance,
         balance - receiver_initial_balance,
@@ -813,7 +813,7 @@ pub fn method_6(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
         let before = nodes_balance[idx];
         let balance = wallet_total_balance(bitcoind, node)?;
         println!(
-            "[Mixer] Node {} Balance (b/a/delta): {:?} | {:?} | {:?}",
+            "[Batch] Node {} Balance (b/a/delta)  : {} | {} | {}",
             idx,
             before,
             balance,
