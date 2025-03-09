@@ -1,5 +1,5 @@
-mod client;
 mod batch;
+mod client;
 mod node;
 mod payjoin;
 mod wallet;
@@ -8,8 +8,8 @@ use std::env;
 
 use bdk_wallet::bitcoin::Amount;
 
-use client::{bitcoind_client, fund_client, get_client_balance, wait_for_block};
 use batch::methods;
+use client::{bitcoind_client, fund_client, get_client_balance, wait_for_block};
 use node::{payjoin_batch, payjoin_open_channel};
 use payjoin::{direct::direct_payjoin, payjoin_v1::do_payjoin_v1, payjoin_v2::do_payjoin_v2};
 use wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance};

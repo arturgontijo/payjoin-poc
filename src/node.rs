@@ -4,18 +4,28 @@ use std::time::Duration;
 use bdk_wallet::{KeychainKind, SignOptions};
 use bitcoincore_rpc::{Client, RpcApi};
 
-use ldk_node::{bitcoin::{
-    key::rand::{thread_rng, Rng}, locktime::absolute::LockTime, policy::DEFAULT_MIN_RELAY_TX_FEE, Amount, FeeRate, Network, Psbt
-}, UserChannelId};
 use ldk_node::config::Config;
 use ldk_node::lightning::ln::msgs::SocketAddress;
 use ldk_node::lightning::ln::types::ChannelId;
 use ldk_node::lightning::routing::gossip::NodeAlias;
 use ldk_node::lightning_invoice::{Bolt11InvoiceDescription, Description};
-use ldk_node::{Builder, Node};
 use ldk_node::LightningBalance::ClaimableAwaitingConfirmations;
+use ldk_node::{
+    bitcoin::{
+        key::rand::{thread_rng, Rng},
+        locktime::absolute::LockTime,
+        policy::DEFAULT_MIN_RELAY_TX_FEE,
+        Amount, FeeRate, Network, Psbt,
+    },
+    UserChannelId,
+};
+use ldk_node::{Builder, Node};
 
-use crate::{batch::methods::{add_utxos_to_psbt, build_psbt}, client::wait_for_block, wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance}};
+use crate::{
+    batch::methods::{add_utxos_to_psbt, build_psbt},
+    client::wait_for_block,
+    wallet::{create_wallet, fund_wallet, sync_wallet, wallet_total_balance},
+};
 
 const CHANNEL_READY_CONFIRMATION_BLOCKS: u64 = 6;
 
@@ -51,8 +61,8 @@ fn get_config(
 }
 
 fn random_port() -> u16 {
-	let mut rng = thread_rng();
-	rng.gen_range(7000..8000)
+    let mut rng = thread_rng();
+    rng.gen_range(7000..8000)
 }
 
 fn setup_nodes(count: u8) -> Result<Vec<Node>, Box<dyn std::error::Error>> {
@@ -79,7 +89,12 @@ fn setup_nodes(count: u8) -> Result<Vec<Node>, Box<dyn std::error::Error>> {
     Ok(nodes)
 }
 
-fn fund_node(bitcoind: &Client, node: &Node, amount: Amount, count: u16) -> Result<(), Box<dyn std::error::Error>> {
+fn fund_node(
+    bitcoind: &Client,
+    node: &Node,
+    amount: Amount,
+    count: u16,
+) -> Result<(), Box<dyn std::error::Error>> {
     let node_address = node.onchain_payment().new_address()?;
     for _ in 0..count {
         bitcoind.send_to_address(&node_address, amount, None, None, None, None, None, None)?;
@@ -87,15 +102,23 @@ fn fund_node(bitcoind: &Client, node: &Node, amount: Amount, count: u16) -> Resu
     Ok(())
 }
 
-fn open_channel(node_a: &Node, node_b: &Node, amount: Amount) -> Result<UserChannelId, Box<dyn std::error::Error>> {
-    let user_channel_id = node_a
-        .open_channel(
-            node_b.node_id(),
-            node_b.listening_addresses().unwrap().first().unwrap().clone(),
-            amount.to_sat(),
-            None,
-            None,
-        )?;
+fn open_channel(
+    node_a: &Node,
+    node_b: &Node,
+    amount: Amount,
+) -> Result<UserChannelId, Box<dyn std::error::Error>> {
+    let user_channel_id = node_a.open_channel(
+        node_b.node_id(),
+        node_b
+            .listening_addresses()
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone(),
+        amount.to_sat(),
+        None,
+        None,
+    )?;
 
     println!(
         "[LDK-Node Payjoin] UserChannelId ({} <-> {}): {:?}",
@@ -103,12 +126,11 @@ fn open_channel(node_a: &Node, node_b: &Node, amount: Amount) -> Result<UserChan
         node_b.node_alias().unwrap().to_string(),
         user_channel_id
     );
-    
+
     Ok(user_channel_id)
 }
 
 pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>> {
-
     println!("[LDK-Node Payjoin] Setting up Sender and Receiver wallets...");
     let mut sender = create_wallet(&[254u8; 64])?;
     let mut receiver = create_wallet(&[255u8; 64])?;
@@ -131,16 +153,19 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
     println!("[LDK-Node Payjoin] sync_wallets()...");
     wait_for_block(bitcoind, 2)?;
     for node in &nodes {
-        println!("[LDK-Node Payjoin][{}] SyncWallets...", node.node_alias().unwrap().to_string());
+        println!(
+            "[LDK-Node Payjoin][{}] SyncWallets...",
+            node.node_alias().unwrap().to_string()
+        );
         node.sync_wallets()?;
     }
 
     println!("[LDK-Node Payjoin] Setup channel topology...");
-	//                    (1M:0)- N2 -(1M:0)
-	//                   /                  \
-	//  N0 -(100k:0)-> N1                    N4
-	//                   \                  /
-	//                    (1M:0)- N3 -(1M:0)
+    //                    (1M:0)- N2 -(1M:0)
+    //                   /                  \
+    //  N0 -(100k:0)-> N1                    N4
+    //                   \                  /
+    //                    (1M:0)- N3 -(1M:0)
     let first_hop_user_channel_id = open_channel(&nodes[0], &nodes[1], Amount::from_sat(500_000))?;
     open_channel(&nodes[1], &nodes[2], Amount::from_sat(500_000))?;
     open_channel(&nodes[1], &nodes[3], Amount::from_sat(500_000))?;
@@ -149,7 +174,10 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
 
     wait_for_block(bitcoind, 2)?;
     for node in &nodes {
-        println!("[LDK-Node Payjoin][{}] SyncWallets...", node.node_alias().unwrap().to_string());
+        println!(
+            "[LDK-Node Payjoin][{}] SyncWallets...",
+            node.node_alias().unwrap().to_string()
+        );
         node.sync_wallets()?;
     }
 
@@ -181,7 +209,7 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
         Some(amount),
         fee_per_participant,
         max_participants,
-        psbt_hex
+        psbt_hex,
     )?;
 
     wait_for_block(&bitcoind, 2)?;
@@ -202,7 +230,10 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
     let tx = psbt.clone().extract_tx()?;
 
     for node in &nodes {
-        println!("[LDK-Node Payjoin][{}] SyncWallets (pre-send-tx)...", node.node_alias().unwrap().to_string());
+        println!(
+            "[LDK-Node Payjoin][{}] SyncWallets (pre-send-tx)...",
+            node.node_alias().unwrap().to_string()
+        );
         node.sync_wallets()?;
     }
 
@@ -211,7 +242,20 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
 
     let mut nodes_balance = vec![];
     for node in nodes.iter_mut() {
-        nodes_balance.push(Amount::from_sat(node.list_balances().total_onchain_balance_sats));
+        nodes_balance.push(Amount::from_sat(
+            node.list_balances().total_onchain_balance_sats,
+        ));
+    }
+
+    println!("\nTx Inputs/Outputs:\n");
+    for input in tx.input.iter() {
+        let tx = bitcoind.get_raw_transaction_info(&input.previous_output.txid, None)?;
+        let value = tx.vout[input.previous_output.vout as usize].value;
+        println!("====> Inputs  ({})", value);
+    }
+
+    for output in tx.output.iter() {
+        println!("====> Outputs ({})", output.value);
     }
 
     println!("\n[LDK-Node Payjoin] Sending Tx...\n");
@@ -220,7 +264,10 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
     wait_for_block(bitcoind, 3)?;
 
     for node in &nodes {
-        println!("[LDK-Node Payjoin][{}] SyncWallets (post-send-tx)...", node.node_alias().unwrap().to_string());
+        println!(
+            "[LDK-Node Payjoin][{}] SyncWallets (post-send-tx)...",
+            node.node_alias().unwrap().to_string()
+        );
         node.sync_wallets()?;
     }
 
