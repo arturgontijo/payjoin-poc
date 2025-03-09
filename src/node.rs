@@ -258,7 +258,10 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
         println!("====> Outputs ({})", output.value);
     }
 
-    println!("\n[LDK-Node Payjoin] Sending Tx (id={})...\n", tx.compute_txid());
+    println!(
+        "\n[LDK-Node Payjoin] Sending Tx (id={})...\n",
+        tx.compute_txid()
+    );
     bitcoind.send_raw_transaction(&tx).unwrap();
 
     wait_for_block(bitcoind, 3)?;
