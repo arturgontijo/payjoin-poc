@@ -1,5 +1,9 @@
 use bdk_wallet::{
-    bitcoin::{bip32::Xpriv, Amount, Network},
+    bitcoin::{
+        bip32::Xpriv,
+        key::rand::{thread_rng, Rng},
+        Amount, Network,
+    },
     template::Bip84,
     KeychainKind, LocalOutput, Wallet,
 };
@@ -29,9 +33,24 @@ pub fn fund_wallet(
     amount: Amount,
     utxos: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut rng = thread_rng();
     for _ in 0..utxos {
         let address = wallet.reveal_next_address(KeychainKind::External).address;
-        client.send_to_address(&address, amount, None, None, None, None, None, None)?;
+        // range -15% and +15%
+        let variation_factor = rng.gen_range(-0.15..=0.15);
+        let amount_u64 = amount.to_sat();
+        let random_amount = amount_u64 as f64 * (1.0 + variation_factor);
+        client.send_to_address(
+            &address,
+            Amount::from_sat(random_amount.round() as u64),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
+        println!("SENDER(addr): {}", address);
     }
     Ok(())
 }

@@ -50,7 +50,7 @@ fn get_config(
     println!("Setting random LDK listening addresses: {:?}", address);
     config.listening_addresses = Some(address);
 
-    let alias = format!("ldk-node-{}", node_alias);
+    let alias = format!("ldk-{}", node_alias);
     let mut bytes = [0u8; 32];
     bytes[..alias.as_bytes().len()].copy_from_slice(alias.as_bytes());
 
@@ -69,7 +69,7 @@ fn setup_nodes(count: u8) -> Result<Vec<Node>, Box<dyn std::error::Error>> {
     let mut nodes = vec![];
     for i in 0..count {
         let port = random_port();
-        let node_alias = format!("node_{}", i);
+        let node_alias = format!("node-{}", i);
         let mut builder = Builder::from_config(get_config(node_alias.as_str(), port, port + 1)?);
         builder.set_chain_source_bitcoind_rpc(
             "0.0.0.0".to_string(),
@@ -93,11 +93,25 @@ fn fund_node(
     bitcoind: &Client,
     node: &Node,
     amount: Amount,
-    count: u16,
+    utxos: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let node_address = node.onchain_payment().new_address()?;
-    for _ in 0..count {
-        bitcoind.send_to_address(&node_address, amount, None, None, None, None, None, None)?;
+    let mut rng = thread_rng();
+    for _ in 0..utxos {
+        let node_address = node.onchain_payment().new_address()?;
+        // range -15% and +15%
+        let variation_factor = rng.gen_range(-0.15..=0.15);
+        let amount_u64 = amount.to_sat();
+        let random_amount = amount_u64 as f64 * (1.0 + variation_factor);
+        bitcoind.send_to_address(
+            &node_address,
+            Amount::from_sat(random_amount.round() as u64),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
     }
     Ok(())
 }
@@ -135,23 +149,20 @@ pub fn payjoin_batch(bitcoind: &Client) -> Result<(), Box<dyn std::error::Error>
     let mut sender = create_wallet(&[254u8; 64])?;
     let mut receiver = create_wallet(&[255u8; 64])?;
 
-    fund_wallet(bitcoind, &mut sender, Amount::from_sat(10_000_000), 5)?;
-
-    wait_for_block(bitcoind, 2)?;
-
-    sync_wallet(bitcoind, &mut sender, true)?;
-
-    // ----- Batch Payjoin ------------------------------------------------------------------------------------
     let mut nodes = setup_nodes(5)?;
 
-    println!("[LDK-Node Payjoin] Sending some UTXOs to the nodes...");
-    let amount = Amount::from_sat(1_000_000);
+    let funding_amount = Amount::from_sat(1_000_000);
+
+    println!("[LDK-Node Payjoin] Sending some UTXOs to the Sender and Nodes...");
+    fund_wallet(bitcoind, &mut sender, funding_amount, 5)?;
     for node in &nodes {
-        fund_node(bitcoind, node, amount, 5)?;
+        fund_node(bitcoind, node, funding_amount, 5)?;
     }
 
-    println!("[LDK-Node Payjoin] sync_wallets()...");
     wait_for_block(bitcoind, 2)?;
+
+    println!("[LDK-Node Payjoin] sync_wallets()...");
+    sync_wallet(bitcoind, &mut sender, true)?;
     for node in &nodes {
         println!(
             "[LDK-Node Payjoin][{}] SyncWallets...",

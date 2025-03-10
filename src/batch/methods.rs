@@ -23,7 +23,7 @@ pub fn add_utxos_to_psbt(
     payer: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut count = 0;
-    let mut receiver_utxos_value = Amount::from_sat(0);
+    let mut utxos_total_value = Amount::from_sat(0);
     let utxos = get_wallet_utxos(wallet);
     for utxo in utxos {
         let mut inserted = false;
@@ -57,13 +57,7 @@ pub fn add_utxos_to_psbt(
                 ..Default::default()
             });
             psbt.unsigned_tx.input.push(input);
-            receiver_utxos_value += utxo.txout.value;
-
-            if let Some(uniform_amount) = uniform_amount {
-                if receiver_utxos_value >= uniform_amount + fee {
-                    break;
-                }
-            }
+            utxos_total_value += utxo.txout.value;
 
             count += 1;
             if count >= max_count {
@@ -72,7 +66,7 @@ pub fn add_utxos_to_psbt(
         };
     }
 
-    let mut value = receiver_utxos_value;
+    let mut value = utxos_total_value;
     if payer {
         value -= fee;
     } else {
