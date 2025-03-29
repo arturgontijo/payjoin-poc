@@ -50,7 +50,6 @@ pub fn fund_wallet(
             None,
             None,
         )?;
-        println!("SENDER(addr): {}", address);
     }
     Ok(())
 }
